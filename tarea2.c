@@ -6,7 +6,7 @@ int numeros[9];
 void numeros10();
 float promedioPositivo();
 float promedioNegativo();
-int factorial(n);
+long long int factorial(n);
 int potencias();
 int fibonacci();
 int serieE();
@@ -21,6 +21,7 @@ int main(){
     printf("La serie fibonacci (4)\n");
     printf("La serie E (5)\n");
     scanf("%d",&foo);
+    printf("\n");
 
     switch (foo) {
     case 1:
@@ -46,10 +47,13 @@ int main(){
 
 void numeros10() {
     int i;
-    for (i=0;i<10;i++) {
-        printf("Dame el numero %d: ", i+1);
+    for (i=0;i<9;i++) {
+        printf("Dame el numero  %d: ", i+1);
         scanf("%d", &numeros[i]);
     }
+    printf("Dame el numero 10: ");
+    scanf("%d", &numeros[9]);
+
     printf("La suma de los numeros es: %d",suma());
     printf("\nEl promedio de los numeros positivos es: %f",promedioPositivo());
     printf("\nEl promedio de los numeros negativos es: %f",promedioNegativo());
@@ -72,9 +76,14 @@ float promedioPositivo() {
             r++;
         }
     }
-    float resulatado = (float) sum/r;
-    return resulatado;
+    if (r!=0) {
+        float resulatado = (float) sum/r;
+        return resulatado;
+    } else {
+        return 0;
+    }
 }
+
 
 float promedioNegativo() {
     int sum = 0, i, r=0;
@@ -84,22 +93,29 @@ float promedioNegativo() {
             r++;
         }
     }
-    float resulatado = (float) sum/r;
-    return resulatado;
+    if (r!=0) {
+        float resulatado = (float) sum/r;
+        return resulatado;
+    } else {
+        return 0;
+    }
 }
 
 void fun() {
-    int num;
-    printf("dime un numero: ");
-    scanf("%d", &num);
-    printf("El factorial de %d es %d",num,factorial(num));
+    long long int num;
+    printf("Dime un numero: ");
+    scanf("%lld", &num);
+    if (num > 20) {
+        printf("El numero maximo que podemos procesar es 20\nSe cambiara tu numero a 20 \n");
+        num = 20;
+    }
+    printf("El factorial de %lld es %lld",num,factorial(num));
 }
 
-int factorial(n) {
-    int sum = 1;
-    while (n > 0) {
+long long int factorial(n) {
+    long long int sum = 1;
+    for (n; n > 0; n--) {
         sum *= n;
-        n--;
     }
     return sum;
 
@@ -156,22 +172,25 @@ int fibonacci() {
 }
 
 int serieE() {
-    int x = 1;
-    float foo = 0, bar = 0, num = 0;
+    int x = 2;
+    float foo = 0, bar = 1, num = 0;
     printf("dime un numero: ");
     scanf("%f", &num);
 
-    while (x <= num) {
-        if (x%2!=0) {
-            foo = (float) 1/x;
-            printf("1/%d - ",x);
-            x++;
-            bar += foo;
-        } else {
-            foo = (float) 1/x;
-            printf("1/%d + ",x);
-            x++;
-            bar -= foo;
+    if (num>0) {
+        printf("1 - ");
+        while (x <= num) {
+            if (x%2!=0) {
+                foo = (float) 1/x;
+                printf("1/%d - ",x);
+                x++;
+                bar += foo;
+            } else {
+                foo = (float) 1/x;
+                printf("1/%d + ",x);
+                x++;
+                bar -= foo;
+            }
         }
     }
     printf("\b\b= %f", bar);
