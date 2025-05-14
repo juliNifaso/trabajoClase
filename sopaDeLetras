@@ -1,0 +1,49 @@
+#import <stdio.h>
+
+struct palabra:
+    int largo;
+    char[largo] escribe;
+    char direcion; // h, v, d, D
+int create();
+int pSelect();
+int draw();
+int start();
+int step();
+int selector();
+int test();
+int end();
+int menu();
+int mOptions();
+int mTimes();
+
+//definir palabras en tazo en archivo
+
+int main() {
+    int size = 18;
+    int tabla[size][size];
+    int nPalabras 5;
+    for(i; i < nPalabras; i++) {
+        palabra[nPalabras] = pSelect();
+    }
+    create(palabra,tabla);
+    //poner palabras en la sopa
+    draw(tabla);
+    //dibujar sopa
+    start();
+    //timer mientras resuelves
+    while(nPalabras>0) {
+        step();
+        //crear sistema selector
+        //rojo para letras seleccionadas
+        //delinear palabras encontradas
+    }
+    //menu start
+    //guardar tiempos en archivo
+    //tabla de mejores tiempos
+    //menu tiempos
+    //menu opciones
+    //manera de insertar palabras al tazo
+    //manera de quitar palabras del tazo
+    //manera de escojer cuantas palabras en la sopa
+    //manera de definir tamaño de sopa
+}
