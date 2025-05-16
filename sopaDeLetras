@@ -1,49 +1,74 @@
-#import <stdio.h>
+#include <stdio.h>
+#include <time.h>
 
-struct palabra:
+struct pals{
     int largo;
-    char[largo] escribe;
+    char escribe[10];
     char direcion; // h, v, d, D
-int create();
-int pSelect();
-int draw();
-int start();
-int step();
-int selector();
-int test();
-int end();
-int menu();
-int mOptions();
-int mTimes();
-
-//definir palabras en tazo en archivo
+};
 
 int main() {
     int size = 18;
     int tabla[size][size];
-    int nPalabras 5;
-    for(i; i < nPalabras; i++) {
-        palabra[nPalabras] = pSelect();
+    int nPalabras = -1;
+
+    FILE *fptr;
+    fptr = fopen("palabras.txt", "w");
+
+    //Si el archivo esta vacio llenalo con palabras
+    if(fptr != NULL) {
+        printf("xd");
+        fprintf(fptr, "%s", "qUESo\n");
+        fprintf(fptr, "%s", "eSNUPi\n");
+        fprintf(fptr, "%s", "pELICULAs\n");
+        fprintf(fptr, "%s", "aSTRONAUTa\n");
+        fprintf(fptr, "%s", "sIGNIFICADo\n");
+        fprintf(fptr, "%s", "hIGo\n");
     }
-    create(palabra,tabla);
-    //poner palabras en la sopa
-    draw(tabla);
-    //dibujar sopa
-    start();
-    //timer mientras resuelves
-    while(nPalabras>0) {
-        step();
-        //crear sistema selector
-        //rojo para letras seleccionadas
-        //delinear palabras encontradas
+
+    fclose(fptr);
+    fptr = fopen("palabras.txt", "r");
+
+    //cuenta cuantas palabras hay
+    char c;
+    for (c = getc(fptr); c != EOF; c = getc(fptr)) {
+        if (c == '\n') {
+            nPalabras = nPalabras + 1;
+        }
     }
-    //menu start
-    //guardar tiempos en archivo
-    //tabla de mejores tiempos
-    //menu tiempos
-    //menu opciones
-    //manera de insertar palabras al tazo
-    //manera de quitar palabras del tazo
-    //manera de escojer cuantas palabras en la sopa
-    //manera de definir tamaño de sopa
+    printf("%d\n",nPalabras);
+    struct pals palabras[nPalabras];
+
+    int foo;
+    char bar[10];
+    for (foo=0; foo < nPalabras; foo++) {
+        for (c = getc(fptr); c != '\n'; c = getc(fptr)) {
+            palabras[foo].largo++;
+            bar[palabras[foo].largo++] = c;
+            if((palabras[foo].largo++<9)&&(c>90)) {
+                c +=32;
+                bar[palabras[foo].largo++] = c;
+                break;
+            }
+        }
+        strcpy(palabras[foo].escribe, bar);
+        printf("%s", palabras[foo].escribe);
+    }
+    // pon las palabras en la sopa
+    // void put();
 }
+
+//void draw() {
+//    int num = 0;
+//    int i = 0;
+//    char l;
+
+//    srand(time(NULL));
+//    for (i; i < 10; i++) {
+//        num = rand() % 25 + 65;
+//        l = num;
+//        printf("%c ", l);
+//        l = num+32;
+//        printf("%c\n", l);
+//    }
+//}
