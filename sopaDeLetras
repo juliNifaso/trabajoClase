@@ -1,5 +1,9 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
 #include <time.h>
+#include <unistd.h>
+
 
 struct pals{
     int largo;
@@ -13,20 +17,21 @@ int main() {
     int nPalabras = -1;
 
     FILE *fptr;
-    fptr = fopen("palabras.txt", "w");
 
-    //Si el archivo esta vacio llenalo con palabras
-    if(fptr != NULL) {
-        printf("xd");
+    if(access("palabras.txt", F_OK) != 0) {
+
+        fptr = fopen("palabras.txt", "w");
+
         fprintf(fptr, "%s", "qUESo\n");
         fprintf(fptr, "%s", "eSNUPi\n");
         fprintf(fptr, "%s", "pELICULAs\n");
         fprintf(fptr, "%s", "aSTRONAUTa\n");
-        fprintf(fptr, "%s", "sIGNIFICADo\n");
+        fprintf(fptr, "%s", "cALZOn\n");
         fprintf(fptr, "%s", "hIGo\n");
+
+        fclose(fptr);
     }
 
-    fclose(fptr);
     fptr = fopen("palabras.txt", "r");
 
     //cuenta cuantas palabras hay
@@ -36,27 +41,34 @@ int main() {
             nPalabras = nPalabras + 1;
         }
     }
+    fclose(fptr);
+
     printf("%d\n",nPalabras);
+
     struct pals palabras[nPalabras];
 
-    int foo;
+    int foo, large = 0;
     char bar[10];
-    for (foo=0; foo < nPalabras; foo++) {
-        for (c = getc(fptr); c != '\n'; c = getc(fptr)) {
-            palabras[foo].largo++;
-            bar[palabras[foo].largo++] = c;
-            if((palabras[foo].largo++<9)&&(c>90)) {
-                c +=32;
-                bar[palabras[foo].largo++] = c;
-                break;
-            }
+
+    c = '\0';
+    fptr = fopen("palabras.txt", "r");
+
+    for (c = getc(fptr); c != EOF; c = getc(fptr)) {
+        if (c == '\n') {
+            printf(" %s ", bar);
+            palabras[foo].largo = large;
+            large = 0;
+            strcpy(palabras[foo].escribe, bar);
+            memset(bar, '\0', 10);
+        } else {
+            bar[large] = c;
+            large += 1;
+            printf("%d", large);
         }
-        strcpy(palabras[foo].escribe, bar);
-        printf("%s", palabras[foo].escribe);
     }
+}
     // pon las palabras en la sopa
     // void put();
-}
 
 //void draw() {
 //    int num = 0;
