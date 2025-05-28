@@ -3,13 +3,33 @@
 #include <stdbool.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 
 struct pals{
     int largo;
     char escribe[10];
     char direcion; // h, v, d, D
+    //bool select = 0;
+    //bool hover = 0;
 };
+
+void sinPalabras(); // si no hay palabras en palabras.txt
+void cuentaPalabras(); // cuenta palabras regresa nPalabras
+//void creaSopa(pals palabras); // pone las palabras en la sopa
+void dibujaSopa();  //dibuja la sopa inicial
+
+void mSopa(); // modifica la sopa en base a las acciones del usuario
+void step(); // usuario se mueve con las flechas y selecciona con espacio
+void mueveP(); // mueve la posicion de el usuario
+void seleccion(); // checa si la palabra seleccionada es correcta
+
+void dibujaUI(); // dibuja el UI inicial
+void mUI(); // modifica el UI
+void pause(); // pausa el juego
+
+void dibujaMenuP(); // dibuja el menu principal
+void mMenuP(); // modifica el menu principal
 
 int main() {
     int size = 18;
@@ -19,17 +39,7 @@ int main() {
     FILE *fptr;
 
     if(access("palabras.txt", F_OK) != 0) {
-
-        fptr = fopen("palabras.txt", "w");
-
-        fprintf(fptr, "%s", "qUESo\n");
-        fprintf(fptr, "%s", "eSNUPi\n");
-        fprintf(fptr, "%s", "pELICULAs\n");
-        fprintf(fptr, "%s", "aSTRONAUTa\n");
-        fprintf(fptr, "%s", "cALZOn\n");
-        fprintf(fptr, "%s", "hIGo\n");
-
-        fclose(fptr);
+        sinPalabras();
     }
 
     fptr = fopen("palabras.txt", "r");
@@ -44,6 +54,8 @@ int main() {
     fclose(fptr);
 
     printf("%d\n",nPalabras);
+
+
 
     struct pals palabras[nPalabras];
 
@@ -67,20 +79,17 @@ int main() {
         }
     }
 }
-    // pon las palabras en la sopa
-    // void put();
 
-//void draw() {
-//    int num = 0;
-//    int i = 0;
-//    char l;
+void sinPalabras() {
+    FILE *fptr;
+    fptr = fopen("palabras.txt", "w");
 
-//    srand(time(NULL));
-//    for (i; i < 10; i++) {
-//        num = rand() % 25 + 65;
-//        l = num;
-//        printf("%c ", l);
-//        l = num+32;
-//        printf("%c\n", l);
-//    }
-//}
+    fprintf(fptr, "%s", "qUESo\n");
+    fprintf(fptr, "%s", "eSNUPi\n");
+    fprintf(fptr, "%s", "pELICULAs\n");
+    fprintf(fptr, "%s", "aSTRONAUTa\n");
+    fprintf(fptr, "%s", "cALZOn\n");
+    fprintf(fptr, "%s", "hIGo\n");
+
+    fclose(fptr);
+}
