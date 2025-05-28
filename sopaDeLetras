@@ -4,7 +4,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/stat.h>
-
+#include <graphics.h>
 
 struct pals{
     int largo;
@@ -14,15 +14,24 @@ struct pals{
     //bool hover = 0;
 };
 
-void sinPalabras(); // si no hay palabras en palabras.txt
-void cuentaPalabras(); // cuenta palabras regresa nPalabras
-//void creaSopa(pals palabras); // pone las palabras en la sopa
-void dibujaSopa();  //dibuja la sopa inicial
+struct user{
+    int ver;
+    int hor;
+    int SEL[2] = 0, 0;
+};
+
+void sinPalabras(); // si no hay palabras en palabras.txt v/
+int cuentaPalabras(); // cuenta palabras regresa nPalabras v/
+//void ponPalabras(); pone las palabras en la estructura */
+//void creaSopa(pals palabras); pone las palabras en la sopa */
+
+//void dibujaSopa(tabla[size][size);  //dibuja la sopa inicial */
+
+void step(); // usuario se mueve con las flechas y selecciona con espacio; */
+void mueveP(char tecla); // mueve la posicion de el usuario */
+void seleccion(); // checa si la palabra seleccionada es correcta
 
 void mSopa(); // modifica la sopa en base a las acciones del usuario
-void step(); // usuario se mueve con las flechas y selecciona con espacio
-void mueveP(); // mueve la posicion de el usuario
-void seleccion(); // checa si la palabra seleccionada es correcta
 
 void dibujaUI(); // dibuja el UI inicial
 void mUI(); // modifica el UI
@@ -34,35 +43,24 @@ void mMenuP(); // modifica el menu principal
 int main() {
     int size = 18;
     int tabla[size][size];
-    int nPalabras = -1;
 
     FILE *fptr;
 
     if(access("palabras.txt", F_OK) != 0) {
         sinPalabras();
     }
-
-    fptr = fopen("palabras.txt", "r");
-
-    //cuenta cuantas palabras hay
-    char c;
-    for (c = getc(fptr); c != EOF; c = getc(fptr)) {
-        if (c == '\n') {
-            nPalabras = nPalabras + 1;
-        }
-    }
-    fclose(fptr);
+    int nPalabras = cuentaPalabras();
 
     printf("%d\n",nPalabras);
 
-
-
     struct pals palabras[nPalabras];
 
+    //pone las palabras en la estructura
+
     int foo, large = 0;
+    int c;
     char bar[10];
 
-    c = '\0';
     fptr = fopen("palabras.txt", "r");
 
     for (c = getc(fptr); c != EOF; c = getc(fptr)) {
@@ -72,12 +70,42 @@ int main() {
             large = 0;
             strcpy(palabras[foo].escribe, bar);
             memset(bar, '\0', 10);
+            // palabras[foo].direccion = rand() % 2; 0 = horizontal 1 = vertical
         } else {
             bar[large] = c;
             large += 1;
             printf("%d", large);
         }
     }
+    fclose(fptr);
+
+    //pone las palabras en la sopa
+        // ordena las palabras por longitud
+        // for palabra mas larga a palabra mas corta
+            // si comparte letra con una ya en el tablero {
+                //si cabe la palabra en ese lugar {
+                    //pon la palabra en ese lugar
+            // poMax = size - palabras[foo].largo
+            // pos = rand() % poMax;
+            // si pos no tiene ninguna otra palabra
+                // if (palabras[foo].direccion = 1) {
+                    //si no hayan letras en el camino
+                        //pon las palabras horizontalmente
+                    //else vuelve a intentar
+                //} else {
+                    //si no hayan letras en el camino
+                        //pon las palabras verticalmente
+                    //else vuelve a intentar
+                //}
+    // int gd = DETECT, gm;
+    // initgraph(&gd, &gm, "");
+
+    // dibujaSopa();
+
+    // struct user uPOS;
+    // int pFaltantes = nPalabras;
+
+    // step();
 }
 
 void sinPalabras() {
@@ -93,3 +121,61 @@ void sinPalabras() {
 
     fclose(fptr);
 }
+
+int cuentaPalabras() {
+    FILE *fptr;
+    fptr = fopen("palabras.txt", "r");
+
+    //cuenta cuantas palabras hay
+    char c;
+    int nPalabras = -1;
+    for (c = getc(fptr); c != EOF; c = getc(fptr)) {
+        if (c == '\n') {
+            nPalabras = nPalabras + 1;
+        }
+    }
+    fclose(fptr);
+    return nPalabras;
+}
+
+// void dibujaSopa(tabla[size][size]) {
+    // genera size * size letras random
+    // ponlas en los espacios vacios
+
+    // rectangle(100, 100, x, x); // Draw a rectangle
+    // y = x / size
+    // for (i; i > size; i++) {
+        // line(100+y*i, 100, 100+y, size);
+        // line(100, 100+y*i, size, 100+y );
+
+    // settextstyle(DEFAULT_FONT, HORIZ_DIR, 2); // Set font, direction, and size
+    // setcolor(WHITE); // Set text color
+    // for (i; i> size; i++) {
+        // for (j, j> size; j++) {
+            // outtextxy(125+(i*y), 125+(j*y), tabla[i][j]);
+    //}
+// }
+
+// void step () {
+    // kPress = getch();
+    // if kPress = 'UP' ? mueveP('U') : if kPress = 'DOWN' ? mueveP('D') : if kPress = 'LEFT' ? mueveP('L') : if kPress = 'RIGHT' ? mueveP('R') : if kPress = 'SPACE' ? seleccion() : if kPress = 'ENTER' ? seleccion() : step();
+// }
+
+// void mueveP(char tecla) {
+    // if tecla = U && uPos.ver > 1
+        // uPos.ver++;
+    // if tecla = D && uPos.ver < size
+        // uPos.ver--;
+    // if tecla = L && uPos.hor > 1
+        // uPos.hor++;
+    // if tecla = R && uPos.hor < size
+        // uPos.hor--;
+//}
+
+// void seleccion() {
+    // if uPos.SEL = 0,0 {
+        // uPos.SEL = uPos.hor , uPos.ver;
+    // else if (grid[uPos.SEL[1]][uPos.SEL[2]] == minuscula) && (grid[uPos.hor][uPos.ver] == minuscula) {
+        // pFaltantes --;
+        // mSopa //no c como pero que haga las letras en seleccion bold
+//}
