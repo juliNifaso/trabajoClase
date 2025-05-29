@@ -1,388 +1,494 @@
-//1. Core Data Structures
+#include <windows.h>  // Necesario para la API de Windows
+#include <stdio.h>	// Para operaciones de entrada/salida (archivos)
+#include <stdlib.h>   // Para funciones como malloc, rand
+#include <stdbool.h>  // Para usar el tipo bool
+#include <time.h> 	// Para time (usado en srand)
+#include <string.h>   // Para funciones de cadenas (strcpy, strcmp)
 
+#pragma comment(lib, "gdi32")
+#pragma comment(lib, "user32")
+#pragma comment(lib, "kernel32")
+
+// METETE A SETTINGS, COMPILER, LINKER SETTINGS Y EN OTHER SETTINGS PON LO SIGUIENTE: -lgdi32 -luser32 -lkernel32
+
+// Definimos una estructura para el estado de cada celda en la sopa de letras
 typedef struct {
-    char escribe[11];  // Stores the word (10 letters + null terminator)
-    int largo;         // Actual word length
-    int direction;     // 0 = horizontal, 1 = vertical
-} Palabra;
+	char letra;      	// La letra que contiene la celda
+	bool seleccionada;   // ¿Está esta celda actualmente seleccionada?
+	bool encontrada; 	// ¿La palabra a la que pertenece esta letra ha sido encontrada?
+	bool flotada;   // ¿El cursor esta arriba de esta celda actualmente?
+} CeldaEstado;
 
-int size;              // Grid dimensions (size x size)
-int nPalabras;         // Number of words to place
-Palabra* palabras;     // Array of word structures
-char** grid;           // 2D grid for final word placement
-int*** heatmap;        // 3D array: [row][col][letter index (0-25)]
-int** totalHeat;       // 2D array: total possibilities per cell
+// Estructura para almacenar información de cada palabra
+struct pals {
+	int largo;       	// Longitud de la palabra
+	char escribe[11];	// La palabra (máximo 10 caracteres + '\0')
+	char direcion;   	// Dirección: 'h' (horizontal) o 'v' (vertical)
+	int startX;      	// Fila inicial de la palabra en la cuadrícula
+	int startY;      	// Columna inicial de la palabra en la cuadrícula
+	bool encontrada; 	// ¿Ha sido encontrada esta palabra?
+};
 
-//2. Grid Initialization
+// Estructura para el estado del usuario (cursor y selección)
+struct user {
+	int ver;         	// Fila actual del cursor (posición vertical)
+	int hor;         	// Columna actual del cursor (posición horizontal)
+	int SEL[2];      	// Coordenadas de inicio de la selección [fila, columna]
+	bool seleccionando;  // ¿Está el usuario en medio de una selección?
+};
 
-void initializeGrid() {
-    // Allocate rows
-    grid = malloc(size * sizeof(char*));
+// Variables globales - accesibles en todo el programa
+int size = 18;       	// Tamaño de la cuadrícula (18x18)
+int nPalabras;       	// Número de palabras en el juego
+struct pals* palabras;  // Arreglo dinámico de palabras
+char** grid;         	// Matriz 2D para la sopa de letras (letras reales)
+CeldaEstado** estadoSopa; // Matriz 2D para el estado de cada celda
+struct user uPOS;    	// Estado actual del usuario
+HWND ghWnd;          	// Identificador de la ventana principal
+char** letrasRand;      // !! Matriz para almacenar letras aleatorias
 
+// Declaraciones de funciones (como prototipos)
+void sinPalabras();   	// Crea archivo de palabras si no existe
+int cuentaPalabras(); 	// Cuenta palabras en el archivo
+void cargarPalabras();	// Carga palabras a memoria
+void ponPalabras();   	// Coloca palabras en la cuadrícula
+void step(WPARAM wParam); // Maneja teclas presionadas
+void mueveP(char tecla);  // Mueve el cursor
+void seleccion();     	// Maneja la selección de palabras
+void verificarPalabra();  // Verifica si la selección es correcta
+void actualizarSeleccion();  // !! función para manejar selección
+
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam); // Maneja mensajes de Windows
+
+// Punto de entrada principal para aplicaciones Windows
+int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR lpCmdLine, int nCmdShow) {
+	// Inicializar generador de números aleatorios
+	srand((unsigned int)time(NULL));
+
+	// Inicializar posición del usuario
+	uPOS.ver = 0;    	// Fila inicial (arriba)
+	uPOS.hor = 0;    	// Columna inicial (izquierda)
+	uPOS.SEL[0] = -1;	// Sin selección inicial
+	uPOS.SEL[1] = -1;
+	uPOS.seleccionando = false; // No está seleccionando
+
+	// Crear matriz de estado de la sopa
+	estadoSopa = (CeldaEstado**)malloc(size * sizeof(CeldaEstado*));
+
+	for (int i = 0; i < size; i++) {
+    	estadoSopa[i] = (CeldaEstado*)malloc(size * sizeof(CeldaEstado));
+    	for (int j = 0; j < size; j++) {
+        	// Inicializar cada celda con punto, no seleccionada, no encontrada
+        	estadoSopa[i][j] = (CeldaEstado){'.', false, false};
+    	}
+	}
+
+    // !! Inicializar matriz de letras aleatorias
+    letrasRand = (char**)malloc(size * sizeof(char*));
     for (int i = 0; i < size; i++) {
-        // Allocate columns
-        grid[i] = malloc(size * sizeof(char));
-
-        // Initialize all cells as empty ('.')
-        memset(grid[i], '.', size);
-    }
-}
-
-//3. Heatmap Initialization
-
-void initializeHeatmap() {
-    // Allocate rows for heatmap
-    heatmap = malloc(size * sizeof(int**));
-    // Allocate rows for totalHeat
-    totalHeat = malloc(size * sizeof(int*));
-
-    for (int i = 0; i < size; i++) {
-        // Allocate columns for heatmap
-        heatmap[i] = malloc(size * sizeof(int*));
-        // Allocate columns for totalHeat
-        totalHeat[i] = malloc(size * sizeof(int));
-
+        letrasRand[i] = (char*)malloc(size * sizeof(char));
         for (int j = 0; j < size; j++) {
-            // Allocate 26 ints for A-Z possibilities
-            heatmap[i][j] = calloc(26, sizeof(int));
-            // Initialize total possibilities to 0
-            totalHeat[i][j] = 0;
+            letrasRand[i][j] = 'A' + rand() % 26;
         }
     }
+
+	// Si no existe el archivo de palabras, crearlo
+    if (GetFileAttributesA("palabras.txt") == INVALID_FILE_ATTRIBUTES) {
+    	sinPalabras();
+	}
+
+	// Contar palabras y reservar memoria
+	nPalabras = cuentaPalabras();
+	palabras = (struct pals*)malloc(nPalabras * sizeof(struct pals));
+	cargarPalabras();  // Cargar palabras a memoria
+
+	// Crear matriz para la sopa de letras
+	grid = (char**)malloc(size * sizeof(char*));
+	for (int i = 0; i < size; i++) {
+    	grid[i] = (char*)malloc(size * sizeof(char));
+    	// Inicializar con puntos (celdas vacías)
+    	memset(grid[i], '.', size);
+	}
+
+	// Colocar las palabras en la cuadrícula
+	ponPalabras();
+
+	// Registrar clase de ventana
+	WNDCLASS wc = {0};
+	wc.lpfnWndProc = WindowProc;   // Función que maneja los mensajes
+	wc.hInstance = hInst;      	// Instancia actual
+	wc.lpszClassName = "SopaLetrasClass"; // Nombre de la clase
+	wc.hCursor = LoadCursor(NULL, IDC_ARROW); // Cursor normal
+	RegisterClass(&wc);         	// Registrar la clase
+
+	// Crear la ventana principal
+	ghWnd = CreateWindow(
+    	"SopaLetrasClass",     	// Clase de ventana
+    	"Sopa de Letras",      	// Título
+    	WS_OVERLAPPEDWINDOW,   	// Estilo de ventana
+    	CW_USEDEFAULT, CW_USEDEFAULT, // Posición
+    	600, 600,              	// Ancho y alto
+    	NULL, NULL, hInst, NULL	// Parámetros adicionales
+	);
+
+	// Mostrar y actualizar ventana
+	ShowWindow(ghWnd, nCmdShow);
+	UpdateWindow(ghWnd);
+
+	// Bucle principal de mensajes
+	MSG msg;
+	while (GetMessage(&msg, NULL, 0, 0)) {
+    	TranslateMessage(&msg);  // Traduce mensajes de teclado
+    	DispatchMessage(&msg);   // Envía mensaje a WindowProc
+	}
+
+	return (int)msg.wParam;
 }
 
-//4. Heatmap Recomputation
+// Función que maneja los mensajes de la ventana
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+	switch (uMsg) {
+    	case WM_KEYDOWN: // Cuando se presiona una tecla
+        	step(wParam); // Procesar la tecla
+        	break;
 
-void recomputeHeatmap(int* placed) {
-    // Reset entire heatmap to zero
+    	case WM_PAINT: { // Cuando se necesita pintar la ventana
+        	PAINTSTRUCT ps;
+        	HDC hdc = BeginPaint(hwnd, &ps);  // Iniciar pintado
+
+        	// Dimensiones de la sopa de letras
+        	const int gridSize = 550; // Tamaño total de la cuadrícula
+        	const int buffer = 10;	// Margen alrededor
+        	const int cellSize = gridSize / size; // Tamaño de cada celda
+
+        	// Crear fuentes
+        	HFONT hFontNormal = CreateFont(20, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                    	DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                    	DEFAULT_QUALITY, DEFAULT_PITCH, "Arial");
+        	HFONT hFontBold = CreateFont(20, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                  	DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                  	DEFAULT_QUALITY, DEFAULT_PITCH, "Arial");
+
+        	// Pintar fondo blanco
+        	RECT rect;
+        	GetClientRect(hwnd, &rect);
+        	FillRect(hdc, &rect, (HBRUSH)(COLOR_WINDOW+1));
+
+        	// Dibujar líneas de la cuadrícula
+        	for (int i = 0; i <= size; i++) {
+            	// Líneas verticales
+            	MoveToEx(hdc, buffer + i * cellSize, buffer, NULL);
+            	LineTo(hdc, buffer + i * cellSize, gridSize);
+
+            	// Líneas horizontales
+            	MoveToEx(hdc, buffer, buffer + i * cellSize, NULL);
+            	LineTo(hdc, gridSize, buffer + i * cellSize);
+        	}
+
+        	// Dibujar letras en cada celda
+        	for (int i = 0; i < size; i++) {
+            	for (int j = 0; j < size; j++) {
+                	char displayChar;
+                	// Si hay una letra de palabra, usarla; si no, letra aleatoria
+                	if (grid[i][j] != '.') {
+                    	displayChar = grid[i][j];
+                	} else {
+                    	displayChar = letrasRand[i][j];
+                	}
+
+                	char str[2] = {displayChar, '\0'}; // Crear cadena para dibujar
+
+                	// Posición para centrar el texto en la celda
+                	int x_pos = buffer + j * cellSize + cellSize / 3;
+                	int y_pos = buffer + i * cellSize + cellSize / 4;
+
+                	if (estadoSopa[i][j].flotada) {
+                    	SelectObject(hdc, hFontBold);
+                    } else {
+                    	SelectObject(hdc, hFontNormal);
+                    }
+
+                	// Configurar estilo según estado de la celda
+                	if (estadoSopa[i][j].encontrada) {
+                    	SetTextColor(hdc, RGB(0, 128, 0));  // Verde: palabra encontrada
+                	} else if (estadoSopa[i][j].seleccionada) {
+                    	SetTextColor(hdc, RGB(255, 0, 0));  // Rojo: celda seleccionada
+                	} else {
+                    	SetTextColor(hdc, RGB(0, 0, 0));	// Negro: normal
+                	}
+
+                	// Dibujar la letra
+                	TextOut(hdc, x_pos, y_pos, str, 1);
+            	}
+        	}
+
+        	// Limpiar recursos
+        	DeleteObject(hFontNormal);
+        	DeleteObject(hFontBold);
+        	EndPaint(hwnd, &ps);  // Finalizar pintado
+        	break;
+    	}
+
+    	case WM_DESTROY: // Cuando se cierra la ventana
+        	// Liberar toda la memoria reservada
+        	for (int i = 0; i < size; i++) {
+                free(letrasRand[i]);
+            	free(estadoSopa[i]);
+            	free(grid[i]);
+        	}
+        	free(letrasRand);
+        	free(estadoSopa);
+        	free(grid);
+        	free(palabras);
+
+        	PostQuitMessage(0); // Salir de la aplicación
+        	break;
+
+    	default:
+        	// Manejar otros mensajes con el procedimiento por defecto
+        	return DefWindowProc(hwnd, uMsg, wParam, lParam);
+	}
+	return 0;
+}
+
+// Crea un archivo de palabras por defecto si no existe
+void sinPalabras() {
+	FILE *fptr = fopen("palabras.txt", "w");
+	if (!fptr) return;
+
+	// Escribir palabras por defecto (en mayúsculas)
+	fprintf(fptr, "QUESO\n");
+	fprintf(fptr, "ESNUPI\n");
+	fprintf(fptr, "PELICULAS\n");
+	fprintf(fptr, "ASTRONAUTA\n");
+	fprintf(fptr, "CALZON\n");
+	fprintf(fptr, "HIGO\n");
+
+	fclose(fptr);
+}
+
+// Cuenta las palabras en el archivo (una por línea)
+int cuentaPalabras() {
+	FILE *fptr = fopen("palabras.txt", "r");
+	if (!fptr) return 0;
+
+	int count = 0;
+    char line[20];
+    // Contar líneas usando fgets
+    while (fgets(line, sizeof(line), fptr)) {
+        count++;
+    }
+
+    // Si el archivo no terminó con nueva línea
+    if (count > 0 && line[strlen(line)-1] != '\n') {
+        count++;
+    }
+	fclose(fptr);
+	return count;
+}
+
+// Carga las palabras desde el archivo a la memoria
+void cargarPalabras() {
+	FILE *fptr = fopen("palabras.txt", "r");
+	if (!fptr) return;
+
+	char line[20];
+	int idx = 0;
+
+	while (fgets(line, sizeof(line), fptr)) {
+    	// Eliminar salto de línea
+    	line[strcspn(line, "\n")] = '\0';
+    	// Copiar palabra a la estructura
+    	strcpy(palabras[idx].escribe, line);
+    	// Guardar longitud
+    	palabras[idx].largo = strlen(line);
+    	// Inicializar como no encontrada
+    	palabras[idx].encontrada = false;
+    	idx++;
+	}
+
+	fclose(fptr);
+}
+
+// Coloca las palabras en la cuadrícula
+void ponPalabras() {
+	for (int p = 0; p < nPalabras; p++) {
+    	// Elegir dirección aleatoria (0 = horizontal, 1 = vertical)
+    	int dir = rand() % 2;
+    	// Máxima posición inicial posible para que quepa la palabra
+    	int max_pos = size - palabras[p].largo;
+
+    	// Si la palabra no cabe, saltarla
+    	if (max_pos <= 0) continue;
+
+    	// Posición inicial aleatoria
+    	int x = rand() % max_pos;
+    	int y = rand() % max_pos;
+
+    	// Guardar posición inicial
+    	palabras[p].startX = x;
+    	palabras[p].startY = y;
+    	// Asignar dirección como carácter
+    	palabras[p].direcion = (dir == 0) ? 'h' : 'v';
+
+    	// Colocar cada letra en la cuadrícula
+    	for (int c = 0; c < palabras[p].largo; c++) {
+            char letra = palabras[p].escribe[c];
+        	if (dir == 0) {  // Horizontal
+            	grid[x][y + c] = letra;
+            	estadoSopa[x][y + c].letra = letra;
+        	} else {  // Vertical
+            	grid[x + c][y] = letra;
+            	estadoSopa[x + c][y].letra = letra;
+        	}
+    	}
+	}
+}
+
+// Maneja las teclas presionadas
+void step(WPARAM wParam) {
+	switch(wParam) {
+    	case VK_LEFT:  mueveP('L'); break;  // Flecha izquierda
+    	case VK_RIGHT: mueveP('R'); break; // Flecha derecha
+    	case VK_UP:	mueveP('U'); break; // Flecha arriba
+    	case VK_DOWN:  mueveP('D'); break; // Flecha abajo
+    	case VK_SPACE: seleccion(); break;  // Espacio: inicio/selección
+    	case VK_RETURN: // Enter: confirmar selección
+        	if (uPOS.seleccionando) {
+            	verificarPalabra();
+            	seleccion();
+        	}
+        	break;
+	}
+	// Forzar repintado de la ventana
+	InvalidateRect(ghWnd, NULL, TRUE);
+}
+
+// Mueve el cursor según la tecla presionada
+void mueveP(char tecla) {
+    // Limpiar estado flotado actual
+    estadoSopa[uPOS.ver][uPOS.hor].flotada = false;
+
+	if (tecla == 'U' && uPOS.ver > 0) uPOS.ver--;   // Arriba
+	else if (tecla == 'D' && uPOS.ver < size - 1) uPOS.ver++;   // Abajo
+	else if (tecla == 'L' && uPOS.hor > 0) uPOS.hor--;  // Izquierda
+	else if (tecla == 'R' && uPOS.hor < size - 1) uPOS.hor++;   // Derecha
+
+    // Actualizar estado flotado
+    estadoSopa[uPOS.ver][uPOS.hor].flotada = true;
+
+    // !! Actualizar selección si es necesario
+    actualizarSeleccion();
+}
+
+// Maneja la selección de palabras
+void seleccion() {
+	if (!uPOS.seleccionando) {
+    	// Comenzar selección: guardar posición actual
+    	uPOS.SEL[0] = uPOS.ver;
+    	uPOS.SEL[1] = uPOS.hor;
+    	uPOS.seleccionando = true;
+
+    	estadoSopa[uPOS.ver][uPOS.hor].seleccionada = true;
+	} else {
+    	// Terminar selección
+        uPOS.SEL[0] = -1;
+    	uPOS.SEL[1] = -1;
+    	uPOS.seleccionando = false;
+	}
+}
+
+// !! Función para actualizar estado de selección
+void actualizarSeleccion() {
+    // Limpiar todas las selecciones previas
     for (int i = 0; i < size; i++) {
         for (int j = 0; j < size; j++) {
-            for (int k = 0; k < 26; k++) {
-                heatmap[i][j][k] = 0;
-            }
-            totalHeat[i][j] = 0;
+            estadoSopa[i][j].seleccionada = false;
         }
     }
+    // Si la posicion del usuario no es una linea recta de la seleccion
+    if (uPOS.seleccionando) {
 
-    // Process each word
-    for (int idx = 0; idx < nPalabras; idx++) {
-        // Skip already placed words
-        if (placed[idx]) continue;
+        int x0 = uPOS.SEL[0];
+        int y0 = uPOS.SEL[1];
+        int x1 = uPOS.ver;
+        int y1 = uPOS.hor;
 
-        Palabra p = palabras[idx];
-        char upperWord[11];
+        bool esHorizontal = (x0 == x1);
+        bool esVertical = (y0 == y1);
 
-        // Convert word to uppercase
-        for (int i = 0; i < p.largo; i++) {
-            upperWord[i] = toupper(p.escribe[i]);
+        // Si es diagonal, cancelar selección
+        if (!esHorizontal && !esVertical) {
+            uPOS.SEL[0] = -1;
+            uPOS.SEL[1] = -1;
+            uPOS.seleccionando = false;
         }
+        // Si es línea recta, marcar el rango
+        else if (esHorizontal || esVertical) {
 
-        // Process horizontal words
-        if (p.direction == 0) {
-            // Try every possible starting position
-            for (int i = 0; i < size; i++) {
-                for (int j = 0; j <= size - p.largo; j++) {
-                    int valid = 1;
+            int dx = (x1 == x0) ? 0 : (x1 > x0) ? 1 : -1;
+            int dy = (y1 == y0) ? 0 : (y1 > y0) ? 1 : -1;
 
-                    // Check if placement is valid
-                    for (int k = 0; k < p.largo; k++) {
-                        // Skip if cell is empty, but conflict if occupied with different letter
-                        if (grid[i][j + k] != '.' &&
-                            grid[i][j + k] != upperWord[k]) {
-                            valid = 0;
-                            break;
-                        }
-                    }
+            int x = x0, y = y0;
 
-                    // If valid, update heatmap
-                    if (valid) {
-                        for (int k = 0; k < p.largo; k++) {
-                            int lidx = upperWord[k] - 'A';
-                            heatmap[i][j + k][lidx]++;  // Increment letter count
-                            totalHeat[i][j + k]++;       // Increment cell total
-                        }
-                    }
-                }
-            }
-        }
-        // Process vertical words (same logic as horizontal)
-        else {
-            for (int i = 0; i <= size - p.largo; i++) {
-                for (int j = 0; j < size; j++) {
-                    int valid = 1;
-                    for (int k = 0; k < p.largo; k++) {
-                        if (grid[i + k][j] != '.' &&
-                            grid[i + k][j] != upperWord[k]) {
-                            valid = 0;
-                            break;
-                        }
-                    }
-                    if (valid) {
-                        for (int k = 0; k < p.largo; k++) {
-                            int lidx = upperWord[k] - 'A';
-                            heatmap[i + k][j][lidx]++;
-                            totalHeat[i + k][j]++;
-                        }
-                    }
-                }
+            while (1) {
+                estadoSopa[x][y].seleccionada = true;
+                if (x == x1 && y == y1) break;
+                x += dx;
+                y += dy;
             }
         }
     }
 }
 
-//5. Placement Score Calculation
 
-double calculatePlacementScore(int wordIdx, int row, int col) {
-    Palabra p = palabras[wordIdx];
-    char upperWord[11];
+// Verifica si la palabra seleccionada es correcta
+void verificarPalabra() {
+	int inicioX = uPOS.SEL[0]; // Fila inicial
+	int inicioY = uPOS.SEL[1]; // Columna inicial
+	int finX = uPOS.ver;   	// Fila final
+	int finY = uPOS.hor;   	// Columna final
 
-    // Convert word to uppercase
-    for (int i = 0; i < p.largo; i++) {
-        upperWord[i] = toupper(p.escribe[i]);
-    }
+	// Determinar dirección de la selección
+	int dx = (finX == inicioX) ? 0 : (finX > inicioX) ? 1 : -1;
+	int dy = (finY == inicioY) ? 0 : (finY > inicioY) ? 1 : -1;
 
-    double disruption = 0;
+	// Extraer la palabra de la cuadrícula
+	char palabra[20] = {0}; // Inicializar con ceros
+	int idx = 0;
+	int x = inicioX, y = inicioY;
 
-    // Calculate disruption for each letter position
-    for (int k = 0; k < p.largo; k++) {
-        // Calculate position in grid
-        int r = row + (p.direction ? k : 0);
-        int c = col + (p.direction ? 0 : k);
+	// Recorrer desde inicio hasta fin
+	while (x != finX + dx || y != finY + dy) {
+    	palabra[idx++] = grid[x][y]; // Añadir letra
+    	x += dx; // Mover en dirección X
+    	y += dy; // Mover en dirección Y
+    	if (idx >= 19) break; // Prevenir desbordamiento
+	}
 
-        // Only count disruption for empty cells
-        if (grid[r][c] == '.') {
-            int lidx = upperWord[k] - 'A';
-            // Disruption = total possibilities - possibilities for this letter
-            disruption += totalHeat[r][c] - heatmap[r][c][lidx];
+	// Buscar la palabra en la lista
+	for (int i = 0; i < nPalabras; i++) {
+    	if (!palabras[i].encontrada &&
+        	strcmp(palabra, palabras[i].escribe) == 0) {
+
+        	// Marcar palabra como encontrada
+        	palabras[i].encontrada = true;
+        	x = palabras[i].startX;
+        	y = palabras[i].startY;
+
+        	// Marcar cada letra como encontrada
+        	for (int c = 0; c < palabras[i].largo; c++) {
+            	estadoSopa[x][y].encontrada = true;
+            	// Mover según dirección de la palabra
+            	if (palabras[i].direcion == 'h') y++;
+            	else x++;
+        	}
+        	break;
+    	}
+	}
+    for (int i = 0; i < size; i++) {
+        for (int j = 0; j < size; j++) {
+            estadoSopa[i][j].seleccionada = false;
         }
     }
-
-    // Calculate distance to grid center
-    double center = (size - 1) / 2.0;
-    double wordCenterX = row + (p.direction ? (p.largo - 1)/2.0 : 0);
-    double wordCenterY = col + (p.direction ? 0 : (p.largo - 1)/2.0);
-    double distance = sqrt(pow(wordCenterX - center, 2) + pow(wordCenterY - center, 2));
-
-    // Combined score (disruption + distance penalty)
-    return disruption + distance;
 }
-
-//6. Main Placement Algorithm
-
-void placeWords() {
-    // Track which words are placed
-    int* placed = calloc(nPalabras, sizeof(int));
-    int placedCount = 0;
-
-    // Initialize data structures
-    initializeGrid();
-    initializeHeatmap();
-    recomputeHeatmap(placed);
-
-    while (placedCount < nPalabras) {
-        int minPlacements = INT_MAX;  // Start with max possible value
-        int candidate = -1;           // Index of most constrained word
-
-        // Find most constrained word (fewest valid placements)
-        for (int idx = 0; idx < nPalabras; idx++) {
-            if (placed[idx]) continue;
-
-            int placements = 0;
-            Palabra p = palabras[idx];
-
-            // Count valid horizontal placements
-            if (p.direction == 0) {
-                for (int i = 0; i < size; i++) {
-                    for (int j = 0; j <= size - p.largo; j++) {
-                        int valid = 1;
-                        for (int k = 0; k < p.largo; k++) {
-                            char c = toupper(p.escribe[k]);
-                            if (grid[i][j + k] != '.' && grid[i][j + k] != c) {
-                                valid = 0;
-                                break;
-                            }
-                        }
-                        placements += valid;
-                    }
-                }
-            }
-            // Count valid vertical placements (similar logic)
-            else {
-                for (int j = 0; j < size; j++) {
-                    for (int i = 0; i <= size - p.largo; i++) {
-                        int valid = 1;
-                        for (int k = 0; k < p.largo; k++) {
-                            char c = toupper(p.escribe[k]);
-                            if (grid[i + k][j] != '.' && grid[i + k][j] != c) {
-                                valid = 0;
-                                break;
-                            }
-                        }
-                        placements += valid;
-                    }
-                }
-            }
-
-            // Update most constrained candidate
-            if (placements < minPlacements) {
-                minPlacements = placements;
-                candidate = idx;
-            }
-        }
-
-        Palabra p = palabras[candidate];
-        double minScore = DBL_MAX;  // Start with max double value
-        int bestRow = -1, bestCol = -1;
-
-        // Find best placement position
-        if (p.direction == 0) {  // Horizontal
-            for (int i = 0; i < size; i++) {
-                for (int j = 0; j <= size - p.largo; j++) {
-                    // Check placement validity
-                    int valid = 1;
-                    for (int k = 0; k < p.largo; k++) {
-                        char c = toupper(p.escribe[k]);
-                        if (grid[i][j + k] != '.' && grid[i][j + k] != c) {
-                            valid = 0;
-                            break;
-                        }
-                    }
-                    if (!valid) continue;
-
-                    // Calculate placement score
-                    double score = calculatePlacementScore(candidate, i, j);
-
-                    // Track best position
-                    if (score < minScore) {
-                        minScore = score;
-                        bestRow = i;
-                        bestCol = j;
-                    }
-                }
-            }
-        }
-        else {  // Vertical
-            for (int j = 0; j < size; j++) {
-                for (int i = 0; i <= size - p.largo; i++) {
-                    int valid = 1;
-                    for (int k = 0; k < p.largo; k++) {
-                        char c = toupper(p.escribe[k]);
-                        if (grid[i + k][j] != '.' && grid[i + k][j] != c) {
-                            valid = 0;
-                            break;
-                        }
-                    }
-                    if (!valid) continue;
-
-                    double score = calculatePlacementScore(candidate, i, j);
-                    if (score < minScore) {
-                        minScore = score;
-                        bestRow = i;
-                        bestCol = j;
-                    }
-                }
-            }
-        }
-
-        // Place the word in grid
-        for (int k = 0; k < p.largo; k++) {
-            char c = toupper(p.escribe[k]);
-            int r = bestRow + (p.direction ? k : 0);
-            int c = bestCol + (p.direction ? 0 : k);
-            grid[r][c] = c;
-        }
-
-        // Update tracking variables
-        placed[candidate] = 1;
-        placedCount++;
-
-        // Recompute heatmap with new constraints
-        recomputeHeatmap(placed);
-    }
-
-    free(placed);
-}
-
-//Key Concepts Clarification:
-
-//    Heatmap Mechanics:
-
-//    Each cell has 26 counters (A-Z) tracking how many words could place that letter
-
-//    totalHeat sums all possibilities for a cell
-
-//    When placing a word, we:
-
-//        Lock cells to specific letters
-
-//        Remove all possibilities that conflict with placed letters
-
-//        Recompute possibilities for remaining words
-
-//    Disruption Calculation:
-
-//    Measures how many possibilities a placement would eliminate
-
-//    For cell (r,c): disruption = totalHeat[r][c] - heatmap[r][c][current_letter]
-
-//    Summed over all letters in the word
-
-//    Higher disruption = more constraints imposed on other words
-
-//    Placement Priority:
-
-//    Words with fewer valid placements (most constrained) go first
-
-//    Within valid placements:
-
-//        Prefer positions causing least disruption
-
-//        Break ties with proximity to center
-
-//    Places most disruptive words first when they have few options
-
-//    Dynamic Updates:
-
-//    Heatmap recomputed after each placement
-
-//    Only considers unplaced words
-
-//    Automatically handles conflicts by removing invalid placements
-
-//Example Walkthrough:
-
-//For a 5x5 grid with word "CAT" (horizontal):
-
-//    Initial Heatmap:
-
-//        Row 1: C can be in columns 0-2, A in 1-3, T in 2-4
-
-//        Cell (1,1): Could be C (from CAT@col0), A (from CAT@col1), or T (from other words)
-
-//    Placement Selection:
-
-//        Try CAT starting at (1,1):
-
-//            Disruption at (1,1): total - C possibilities
-
-//            Disruption at (1,2): total - A possibilities
-
-//            Disruption at (1,3): total - T possibilities
-
-//        Calculate center distance
-
-//        Compare scores with other positions
-
-//    After Placement:
-
-//        Cells (1,1),(1,2),(1,3) locked to C,A,T
-
-//        Heatmap updated:
-
-//            Remove all placements conflicting with these letters
-
-//            Update possibility counts for remaining words
-
-// This approach maintains superposition of possible letters,
-// places words to minimize disruption, and dynamically updates constraints without backtracking.
-// The heatmap acts as a guide to resolve conflicts intelligently while preferring central positions.
