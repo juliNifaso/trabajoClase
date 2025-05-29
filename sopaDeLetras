@@ -4,7 +4,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/stat.h>
-#include <graphics.h>
+
 
 struct pals{
     int largo;
@@ -142,17 +142,17 @@ int cuentaPalabras() {
     // genera size * size letras random
     // ponlas en los espacios vacios
 
-    // rectangle(100, 100, x, x); // Draw a rectangle
-    // y = x / size
+    // Rectangle(hdc, 100, 100, x, x); // Draw a rectangle
+    // k = x / size
     // for (i; i > size; i++) {
-        // line(100+y*i, 100, 100+y, size);
-        // line(100, 100+y*i, size, 100+y );
+        // line(100+k*i, 100, 100+k, size);
+        // line(100, 100+k*i, size, 100+k );
 
     // settextstyle(DEFAULT_FONT, HORIZ_DIR, 2); // Set font, direction, and size
     // setcolor(WHITE); // Set text color
     // for (i; i> size; i++) {
         // for (j, j> size; j++) {
-            // outtextxy(125+(i*y), 125+(j*y), tabla[i][j]);
+            // outtextxy(125+(i*k), 125+(j*k), tabla[i][j]);
     //}
 // }
 
