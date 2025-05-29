@@ -1,181 +1,388 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <time.h>
-#include <unistd.h>
-#include <sys/stat.h>
+//1. Core Data Structures
 
+typedef struct {
+    char escribe[11];  // Stores the word (10 letters + null terminator)
+    int largo;         // Actual word length
+    int direction;     // 0 = horizontal, 1 = vertical
+} Palabra;
 
-struct pals{
-    int largo;
-    char escribe[10];
-    char direcion; // h, v, d, D
-    //bool select = 0;
-    //bool hover = 0;
-};
+int size;              // Grid dimensions (size x size)
+int nPalabras;         // Number of words to place
+Palabra* palabras;     // Array of word structures
+char** grid;           // 2D grid for final word placement
+int*** heatmap;        // 3D array: [row][col][letter index (0-25)]
+int** totalHeat;       // 2D array: total possibilities per cell
 
-struct user{
-    int ver;
-    int hor;
-    int SEL[2] = 0, 0;
-};
+//2. Grid Initialization
 
-void sinPalabras(); // si no hay palabras en palabras.txt v/
-int cuentaPalabras(); // cuenta palabras regresa nPalabras v/
-//void ponPalabras(); pone las palabras en la estructura */
-//void creaSopa(pals palabras); pone las palabras en la sopa */
+void initializeGrid() {
+    // Allocate rows
+    grid = malloc(size * sizeof(char*));
 
-//void dibujaSopa(tabla[size][size);  //dibuja la sopa inicial */
+    for (int i = 0; i < size; i++) {
+        // Allocate columns
+        grid[i] = malloc(size * sizeof(char));
 
-void step(); // usuario se mueve con las flechas y selecciona con espacio; */
-void mueveP(char tecla); // mueve la posicion de el usuario */
-void seleccion(); // checa si la palabra seleccionada es correcta
-
-void mSopa(); // modifica la sopa en base a las acciones del usuario
-
-void dibujaUI(); // dibuja el UI inicial
-void mUI(); // modifica el UI
-void pause(); // pausa el juego
-
-void dibujaMenuP(); // dibuja el menu principal
-void mMenuP(); // modifica el menu principal
-
-int main() {
-    int size = 18;
-    int tabla[size][size];
-
-    FILE *fptr;
-
-    if(access("palabras.txt", F_OK) != 0) {
-        sinPalabras();
+        // Initialize all cells as empty ('.')
+        memset(grid[i], '.', size);
     }
-    int nPalabras = cuentaPalabras();
+}
 
-    printf("%d\n",nPalabras);
+//3. Heatmap Initialization
 
-    struct pals palabras[nPalabras];
+void initializeHeatmap() {
+    // Allocate rows for heatmap
+    heatmap = malloc(size * sizeof(int**));
+    // Allocate rows for totalHeat
+    totalHeat = malloc(size * sizeof(int*));
 
-    //pone las palabras en la estructura
+    for (int i = 0; i < size; i++) {
+        // Allocate columns for heatmap
+        heatmap[i] = malloc(size * sizeof(int*));
+        // Allocate columns for totalHeat
+        totalHeat[i] = malloc(size * sizeof(int));
 
-    int foo, large = 0;
-    int c;
-    char bar[10];
-
-    fptr = fopen("palabras.txt", "r");
-
-    for (c = getc(fptr); c != EOF; c = getc(fptr)) {
-        if (c == '\n') {
-            printf(" %s ", bar);
-            palabras[foo].largo = large;
-            large = 0;
-            strcpy(palabras[foo].escribe, bar);
-            memset(bar, '\0', 10);
-            // palabras[foo].direccion = rand() % 2; 0 = horizontal 1 = vertical
-        } else {
-            bar[large] = c;
-            large += 1;
-            printf("%d", large);
+        for (int j = 0; j < size; j++) {
+            // Allocate 26 ints for A-Z possibilities
+            heatmap[i][j] = calloc(26, sizeof(int));
+            // Initialize total possibilities to 0
+            totalHeat[i][j] = 0;
         }
     }
-    fclose(fptr);
-
-    //pone las palabras en la sopa
-        // ordena las palabras por longitud
-        // for palabra mas larga a palabra mas corta
-            // si comparte letra con una ya en el tablero {
-                //si cabe la palabra en ese lugar {
-                    //pon la palabra en ese lugar
-            // poMax = size - palabras[foo].largo
-            // pos = rand() % poMax;
-            // si pos no tiene ninguna otra palabra
-                // if (palabras[foo].direccion = 1) {
-                    //si no hayan letras en el camino
-                        //pon las palabras horizontalmente
-                    //else vuelve a intentar
-                //} else {
-                    //si no hayan letras en el camino
-                        //pon las palabras verticalmente
-                    //else vuelve a intentar
-                //}
-    // int gd = DETECT, gm;
-    // initgraph(&gd, &gm, "");
-
-    // dibujaSopa();
-
-    // struct user uPOS;
-    // int pFaltantes = nPalabras;
-
-    // step();
 }
 
-void sinPalabras() {
-    FILE *fptr;
-    fptr = fopen("palabras.txt", "w");
+//4. Heatmap Recomputation
 
-    fprintf(fptr, "%s", "qUESo\n");
-    fprintf(fptr, "%s", "eSNUPi\n");
-    fprintf(fptr, "%s", "pELICULAs\n");
-    fprintf(fptr, "%s", "aSTRONAUTa\n");
-    fprintf(fptr, "%s", "cALZOn\n");
-    fprintf(fptr, "%s", "hIGo\n");
-
-    fclose(fptr);
-}
-
-int cuentaPalabras() {
-    FILE *fptr;
-    fptr = fopen("palabras.txt", "r");
-
-    //cuenta cuantas palabras hay
-    char c;
-    int nPalabras = -1;
-    for (c = getc(fptr); c != EOF; c = getc(fptr)) {
-        if (c == '\n') {
-            nPalabras = nPalabras + 1;
+void recomputeHeatmap(int* placed) {
+    // Reset entire heatmap to zero
+    for (int i = 0; i < size; i++) {
+        for (int j = 0; j < size; j++) {
+            for (int k = 0; k < 26; k++) {
+                heatmap[i][j][k] = 0;
+            }
+            totalHeat[i][j] = 0;
         }
     }
-    fclose(fptr);
-    return nPalabras;
+
+    // Process each word
+    for (int idx = 0; idx < nPalabras; idx++) {
+        // Skip already placed words
+        if (placed[idx]) continue;
+
+        Palabra p = palabras[idx];
+        char upperWord[11];
+
+        // Convert word to uppercase
+        for (int i = 0; i < p.largo; i++) {
+            upperWord[i] = toupper(p.escribe[i]);
+        }
+
+        // Process horizontal words
+        if (p.direction == 0) {
+            // Try every possible starting position
+            for (int i = 0; i < size; i++) {
+                for (int j = 0; j <= size - p.largo; j++) {
+                    int valid = 1;
+
+                    // Check if placement is valid
+                    for (int k = 0; k < p.largo; k++) {
+                        // Skip if cell is empty, but conflict if occupied with different letter
+                        if (grid[i][j + k] != '.' &&
+                            grid[i][j + k] != upperWord[k]) {
+                            valid = 0;
+                            break;
+                        }
+                    }
+
+                    // If valid, update heatmap
+                    if (valid) {
+                        for (int k = 0; k < p.largo; k++) {
+                            int lidx = upperWord[k] - 'A';
+                            heatmap[i][j + k][lidx]++;  // Increment letter count
+                            totalHeat[i][j + k]++;       // Increment cell total
+                        }
+                    }
+                }
+            }
+        }
+        // Process vertical words (same logic as horizontal)
+        else {
+            for (int i = 0; i <= size - p.largo; i++) {
+                for (int j = 0; j < size; j++) {
+                    int valid = 1;
+                    for (int k = 0; k < p.largo; k++) {
+                        if (grid[i + k][j] != '.' &&
+                            grid[i + k][j] != upperWord[k]) {
+                            valid = 0;
+                            break;
+                        }
+                    }
+                    if (valid) {
+                        for (int k = 0; k < p.largo; k++) {
+                            int lidx = upperWord[k] - 'A';
+                            heatmap[i + k][j][lidx]++;
+                            totalHeat[i + k][j]++;
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
-// void dibujaSopa(tabla[size][size]) {
-    // genera size * size letras random
-    // ponlas en los espacios vacios
+//5. Placement Score Calculation
 
-    // Rectangle(hdc, 100, 100, x, x); // Draw a rectangle
-    // k = x / size
-    // for (i; i > size; i++) {
-        // line(100+k*i, 100, 100+k, size);
-        // line(100, 100+k*i, size, 100+k );
+double calculatePlacementScore(int wordIdx, int row, int col) {
+    Palabra p = palabras[wordIdx];
+    char upperWord[11];
 
-    // settextstyle(DEFAULT_FONT, HORIZ_DIR, 2); // Set font, direction, and size
-    // setcolor(WHITE); // Set text color
-    // for (i; i> size; i++) {
-        // for (j, j> size; j++) {
-            // outtextxy(125+(i*k), 125+(j*k), tabla[i][j]);
-    //}
-// }
+    // Convert word to uppercase
+    for (int i = 0; i < p.largo; i++) {
+        upperWord[i] = toupper(p.escribe[i]);
+    }
 
-// void step () {
-    // kPress = getch();
-    // if kPress = 'UP' ? mueveP('U') : if kPress = 'DOWN' ? mueveP('D') : if kPress = 'LEFT' ? mueveP('L') : if kPress = 'RIGHT' ? mueveP('R') : if kPress = 'SPACE' ? seleccion() : if kPress = 'ENTER' ? seleccion() : step();
-// }
+    double disruption = 0;
 
-// void mueveP(char tecla) {
-    // if tecla = U && uPos.ver > 1
-        // uPos.ver++;
-    // if tecla = D && uPos.ver < size
-        // uPos.ver--;
-    // if tecla = L && uPos.hor > 1
-        // uPos.hor++;
-    // if tecla = R && uPos.hor < size
-        // uPos.hor--;
-//}
+    // Calculate disruption for each letter position
+    for (int k = 0; k < p.largo; k++) {
+        // Calculate position in grid
+        int r = row + (p.direction ? k : 0);
+        int c = col + (p.direction ? 0 : k);
 
-// void seleccion() {
-    // if uPos.SEL = 0,0 {
-        // uPos.SEL = uPos.hor , uPos.ver;
-    // else if (grid[uPos.SEL[1]][uPos.SEL[2]] == minuscula) && (grid[uPos.hor][uPos.ver] == minuscula) {
-        // pFaltantes --;
-        // mSopa //no c como pero que haga las letras en seleccion bold
-//}
+        // Only count disruption for empty cells
+        if (grid[r][c] == '.') {
+            int lidx = upperWord[k] - 'A';
+            // Disruption = total possibilities - possibilities for this letter
+            disruption += totalHeat[r][c] - heatmap[r][c][lidx];
+        }
+    }
+
+    // Calculate distance to grid center
+    double center = (size - 1) / 2.0;
+    double wordCenterX = row + (p.direction ? (p.largo - 1)/2.0 : 0);
+    double wordCenterY = col + (p.direction ? 0 : (p.largo - 1)/2.0);
+    double distance = sqrt(pow(wordCenterX - center, 2) + pow(wordCenterY - center, 2));
+
+    // Combined score (disruption + distance penalty)
+    return disruption + distance;
+}
+
+//6. Main Placement Algorithm
+
+void placeWords() {
+    // Track which words are placed
+    int* placed = calloc(nPalabras, sizeof(int));
+    int placedCount = 0;
+
+    // Initialize data structures
+    initializeGrid();
+    initializeHeatmap();
+    recomputeHeatmap(placed);
+
+    while (placedCount < nPalabras) {
+        int minPlacements = INT_MAX;  // Start with max possible value
+        int candidate = -1;           // Index of most constrained word
+
+        // Find most constrained word (fewest valid placements)
+        for (int idx = 0; idx < nPalabras; idx++) {
+            if (placed[idx]) continue;
+
+            int placements = 0;
+            Palabra p = palabras[idx];
+
+            // Count valid horizontal placements
+            if (p.direction == 0) {
+                for (int i = 0; i < size; i++) {
+                    for (int j = 0; j <= size - p.largo; j++) {
+                        int valid = 1;
+                        for (int k = 0; k < p.largo; k++) {
+                            char c = toupper(p.escribe[k]);
+                            if (grid[i][j + k] != '.' && grid[i][j + k] != c) {
+                                valid = 0;
+                                break;
+                            }
+                        }
+                        placements += valid;
+                    }
+                }
+            }
+            // Count valid vertical placements (similar logic)
+            else {
+                for (int j = 0; j < size; j++) {
+                    for (int i = 0; i <= size - p.largo; i++) {
+                        int valid = 1;
+                        for (int k = 0; k < p.largo; k++) {
+                            char c = toupper(p.escribe[k]);
+                            if (grid[i + k][j] != '.' && grid[i + k][j] != c) {
+                                valid = 0;
+                                break;
+                            }
+                        }
+                        placements += valid;
+                    }
+                }
+            }
+
+            // Update most constrained candidate
+            if (placements < minPlacements) {
+                minPlacements = placements;
+                candidate = idx;
+            }
+        }
+
+        Palabra p = palabras[candidate];
+        double minScore = DBL_MAX;  // Start with max double value
+        int bestRow = -1, bestCol = -1;
+
+        // Find best placement position
+        if (p.direction == 0) {  // Horizontal
+            for (int i = 0; i < size; i++) {
+                for (int j = 0; j <= size - p.largo; j++) {
+                    // Check placement validity
+                    int valid = 1;
+                    for (int k = 0; k < p.largo; k++) {
+                        char c = toupper(p.escribe[k]);
+                        if (grid[i][j + k] != '.' && grid[i][j + k] != c) {
+                            valid = 0;
+                            break;
+                        }
+                    }
+                    if (!valid) continue;
+
+                    // Calculate placement score
+                    double score = calculatePlacementScore(candidate, i, j);
+
+                    // Track best position
+                    if (score < minScore) {
+                        minScore = score;
+                        bestRow = i;
+                        bestCol = j;
+                    }
+                }
+            }
+        }
+        else {  // Vertical
+            for (int j = 0; j < size; j++) {
+                for (int i = 0; i <= size - p.largo; i++) {
+                    int valid = 1;
+                    for (int k = 0; k < p.largo; k++) {
+                        char c = toupper(p.escribe[k]);
+                        if (grid[i + k][j] != '.' && grid[i + k][j] != c) {
+                            valid = 0;
+                            break;
+                        }
+                    }
+                    if (!valid) continue;
+
+                    double score = calculatePlacementScore(candidate, i, j);
+                    if (score < minScore) {
+                        minScore = score;
+                        bestRow = i;
+                        bestCol = j;
+                    }
+                }
+            }
+        }
+
+        // Place the word in grid
+        for (int k = 0; k < p.largo; k++) {
+            char c = toupper(p.escribe[k]);
+            int r = bestRow + (p.direction ? k : 0);
+            int c = bestCol + (p.direction ? 0 : k);
+            grid[r][c] = c;
+        }
+
+        // Update tracking variables
+        placed[candidate] = 1;
+        placedCount++;
+
+        // Recompute heatmap with new constraints
+        recomputeHeatmap(placed);
+    }
+
+    free(placed);
+}
+
+//Key Concepts Clarification:
+
+//    Heatmap Mechanics:
+
+//    Each cell has 26 counters (A-Z) tracking how many words could place that letter
+
+//    totalHeat sums all possibilities for a cell
+
+//    When placing a word, we:
+
+//        Lock cells to specific letters
+
+//        Remove all possibilities that conflict with placed letters
+
+//        Recompute possibilities for remaining words
+
+//    Disruption Calculation:
+
+//    Measures how many possibilities a placement would eliminate
+
+//    For cell (r,c): disruption = totalHeat[r][c] - heatmap[r][c][current_letter]
+
+//    Summed over all letters in the word
+
+//    Higher disruption = more constraints imposed on other words
+
+//    Placement Priority:
+
+//    Words with fewer valid placements (most constrained) go first
+
+//    Within valid placements:
+
+//        Prefer positions causing least disruption
+
+//        Break ties with proximity to center
+
+//    Places most disruptive words first when they have few options
+
+//    Dynamic Updates:
+
+//    Heatmap recomputed after each placement
+
+//    Only considers unplaced words
+
+//    Automatically handles conflicts by removing invalid placements
+
+//Example Walkthrough:
+
+//For a 5x5 grid with word "CAT" (horizontal):
+
+//    Initial Heatmap:
+
+//        Row 1: C can be in columns 0-2, A in 1-3, T in 2-4
+
+//        Cell (1,1): Could be C (from CAT@col0), A (from CAT@col1), or T (from other words)
+
+//    Placement Selection:
+
+//        Try CAT starting at (1,1):
+
+//            Disruption at (1,1): total - C possibilities
+
+//            Disruption at (1,2): total - A possibilities
+
+//            Disruption at (1,3): total - T possibilities
+
+//        Calculate center distance
+
+//        Compare scores with other positions
+
+//    After Placement:
+
+//        Cells (1,1),(1,2),(1,3) locked to C,A,T
+
+//        Heatmap updated:
+
+//            Remove all placements conflicting with these letters
+
+//            Update possibility counts for remaining words
+
+// This approach maintains superposition of possible letters,
+// places words to minimize disruption, and dynamically updates constraints without backtracking.
+// The heatmap acts as a guide to resolve conflicts intelligently while preferring central positions.
