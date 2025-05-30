@@ -50,7 +50,7 @@ char** letrasRand;        // Letras aleatorias para celdas vacías
 // Declaraciones de funciones (como prototipos)
 void sinPalabras();   	     // Crea archivo de palabras si no existe
 int cuentaPalabras(); 	     // Cuenta las palabras en el archivo
-void cargarPalabras();	     // Carga las palabras a la memoria
+void cargarPalabras();	     // Mover las palabras del archivo a el programa
 void ponPalabras();   	     // Coloca las palabras en la cuadrícula
 void step(WPARAM wParam);    // Maneja teclas presionadas
 void mueveP(char tecla);     // Mueve el cursor
@@ -61,9 +61,18 @@ void reiniciarSopa();        // Prepara nueva sopa
 
 // Funcion principal para manejar eventos de Windows
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+// hwnd es el identificador de la ventana que recibe el mensaje
+// uMsg es el codigo del mensaje
+// wParam es la informacion adicional que tenga el mensaje
+// lParam es mas informacion todavia
 
-// Punto de entrada principal para aplicaciones Windows
+// Punto de entrada principal para aplicaciones Windows (equivalente a main())
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR lpCmdLine, int nCmdShow) {
+// hInst es el identificador de la instancia
+// HINSTANCE hPrevInst es obsoleto pero igual lo piden
+// LPSTR lpCmdLine es por si usas linea de comandos que no uso pero igual windows lo pide igual
+// nCmdShow es como se muestra la ventana inicialmente
+
 
 	// Hace que los numeros sean aleatoreos
 	srand((unsigned int)time(NULL));
@@ -82,19 +91,15 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR lpCmdLine, int nC
 
 	for (int i = 0; i < size; i++) {
     	estadoSopa[i] = (CeldaEstado*)malloc(size * sizeof(CeldaEstado));
+    	letrasRand[i] = (char*)malloc(size * sizeof(char));
+        grid[i] = (char*)malloc(size * sizeof(char));
+
     	for (int j = 0; j < size; j++) {
-        	// Inicializar cada celda con punto, no seleccionada, no encontrada
         	estadoSopa[i][j] = (CeldaEstado){'.', false, false};
+        	letrasRand[i][j] = 'A' + rand() % 26; // Letra aleatoria A-Z
+        	grid[i][j] = '.';  // Inicialmente vacia
     	}
 	}
-
-    // Inicializa matriz de letras aleatorias
-    for (int i = 0; i < size; i++) {
-        letrasRand[i] = (char*)malloc(size * sizeof(char));
-        for (int j = 0; j < size; j++) {
-            letrasRand[i][j] = 'A' + rand() % 26;
-        }
-    }
 
 	// Si no existe el archivo de palabras, crearlo
     if (GetFileAttributesA("palabras.txt") == INVALID_FILE_ATTRIBUTES) {
@@ -104,68 +109,67 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR lpCmdLine, int nC
 	// Contar palabras y reservar memoria
 	nPalabras = cuentaPalabras();
 	pFaltantes = nPalabras;
-	palabras = (struct pals*)malloc(nPalabras * sizeof(struct pals));
+	palabras = malloc(nPalabras * sizeof(struct pals));
+
 	cargarPalabras();  // Cargar palabras a memoria
+	ponPalabras();  // Colocar las palabras en la cuadrícula
 
-	// Crear matriz para la sopa de letras
-	for (int i = 0; i < size; i++) {
-    	grid[i] = (char*)malloc(size * sizeof(char));
-    	// Inicializar con puntos (celdas vacías)
-    	memset(grid[i], '.', size);
-	}
+	// Define la ventana
+	WNDCLASS wc = {0};                          // Crea una estructura WNDCLASS inicializada a ceros. WNDCLASS es la estructura que define como va a funcionar la ventana
+	wc.lpfnWndProc = WindowProc;                // Funcion que maneja los mensajes (Teclas que el usuario pica o otras cosas de windows)
+	wc.hInstance = hInst;      	                // Identificador de instancia actual. Que windows diferencie esta instancia de otros programas
+	wc.lpszClassName = "SopaLetras";            // Nombre para identificar esta ventana en el sistema
+	wc.hCursor = LoadCursor(NULL, IDC_ARROW);   // Que cursor mostrar cuando estas sobre esta ventana (El normal)
+	RegisterClass(&wc);         	            // Registra la clase en Windows
 
-	// Colocar las palabras en la cuadrícula
-	ponPalabras();
-
-	// Registrar clase de ventana
-	WNDCLASS wc = {0};
-	wc.lpfnWndProc = WindowProc;   // Función que maneja los mensajes
-	wc.hInstance = hInst;      	// Instancia actual
-	wc.lpszClassName = "SopaLetrasClass"; // Nombre de la clase
-	wc.hCursor = LoadCursor(NULL, IDC_ARROW); // Cursor normal
-	RegisterClass(&wc);         	// Registrar la clase
-
-	// Crear la ventana principal
+	// Crea la ventana
 	ghWnd = CreateWindow(
-    	"SopaLetrasClass",     	// Clase de ventana
-    	"Sopa de Letras",      	// Título
-    	WS_OVERLAPPEDWINDOW,   	// Estilo de ventana
-    	CW_USEDEFAULT, CW_USEDEFAULT, // Posición
+    	"SopaLetras",       	// Nombre de ventana
+    	"Sopa de Letras",      	// Título de la ventana
+    	WS_OVERLAPPEDWINDOW,   	// Estilo de ventana: estandar
+    	CW_USEDEFAULT,          // Posicion X
+    	CW_USEDEFAULT,          // Posicion Y
     	800, 600,              	// Ancho y alto
-    	NULL, NULL, hInst, NULL	// Parámetros adicionales
+    	NULL, NULL,             // Sin ventana padre ni menu
+    	hInst, NULL	            // Instancia y datos adicionales
 	);
 
 	// Mostrar y actualizar ventana
-	ShowWindow(ghWnd, nCmdShow);
-	UpdateWindow(ghWnd);
+	ShowWindow(ghWnd, nCmdShow); // Muestra la ventana. nCmdShow dice si la ventana esta maximizada o normal o de otra forma
+	UpdateWindow(ghWnd);         // Fuerza repintar la ventana (por primera vez)
 
-	// Bucle principal de mensajes
-	MSG msg;
-	while (GetMessage(&msg, NULL, 0, 0)) {
-    	TranslateMessage(&msg);  // Traduce mensajes de teclado
-    	DispatchMessage(&msg);   // Envía mensaje a WindowProc
+	// Bucle principal de mensajes (Donde windows le manda informacion a el programa ya sea teclas o algo mas)
+	MSG msg;    // Estructura para almacenar mensajes
+	while (GetMessage(&msg, NULL, 0, 0)) {  // Recive los mensajes de windows, no pasa si no hay mensaje
+    	TranslateMessage(&msg);             // Convierte los mensajes del teclado a caracteres
+    	DispatchMessage(&msg);              // Envia estos mensajes a WindowProc
 	}
 
-	return (int)msg.wParam;
+	return (int)msg.wParam; // Regresa al codigo
+
+
 }
 
 // Función que maneja los mensajes de la ventana
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	switch (uMsg) {
-    	case WM_KEYDOWN: // Cuando se presiona una tecla
-        	step(wParam); // Procesar la tecla
+    	case WM_KEYDOWN: // Si se presiona una tecla
+        	step(wParam); // Procesa la tecla
         	break;
 
-    	case WM_PAINT: { // Cuando se necesita pintar la ventana
+    	case WM_PAINT: { // Dibujar
         	PAINTSTRUCT ps;
         	HDC hdc = BeginPaint(hwnd, &ps);  // Iniciar pintado
 
         	// Dimensiones de la sopa de letras
-        	const int gridSize = 550; // Tamaño total de la cuadrícula
+        	const int gridSize = 550; // Tamaño total de la sopa
         	const int buffer = 10;	// Margen alrededor
         	const int cellSize = gridSize / size; // Tamaño de cada celda
 
-        	// Crear fuentes
+        	// Crear fonts
+
+        	// CreateFont(Altura,  Anchura, No entiendo pero no lo tocare entonces no importa, Orientacion, Grosor (Normal o Negrita), Italico?, Subrayado?, Tachado?,
+                      //  DEFAULT_CHARSET = caracteres normales osea ascii, font)
         	HFONT hFontNormal = CreateFont(20, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                     	DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                     	DEFAULT_QUALITY, DEFAULT_PITCH, "Arial");
@@ -175,25 +179,25 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         	// Pintar fondo blanco
         	RECT rect;
-        	GetClientRect(hwnd, &rect);
-        	FillRect(hdc, &rect, (HBRUSH)(COLOR_WINDOW+1));
+        	GetClientRect(hwnd, &rect); // Tamano de area en la ventana que puedes usar
+        	FillRect(hdc, &rect, (HBRUSH)(COLOR_WINDOW+1)); // llena el rectangulo con fondo blanco usando el pincel normal
 
         	// Dibujar líneas de la cuadrícula
         	for (int i = 0; i <= size; i++) {
             	// Líneas verticales
-            	MoveToEx(hdc, buffer + i * cellSize, buffer, NULL);
-            	LineTo(hdc, buffer + i * cellSize, gridSize);
+            	MoveToEx(hdc, buffer + i * cellSize, buffer, NULL); // Donde la linea empieza
+            	LineTo(hdc, buffer + i * cellSize, gridSize);       // Donde la linea termina
 
             	// Líneas horizontales
-            	MoveToEx(hdc, buffer, buffer + i * cellSize, NULL);
-            	LineTo(hdc, gridSize, buffer + i * cellSize);
+            	MoveToEx(hdc, buffer, buffer + i * cellSize, NULL); // Donde la linea empieza
+            	LineTo(hdc, gridSize, buffer + i * cellSize);       // Donde la linea termina
         	}
 
         	// Dibujar letras en cada celda
         	for (int i = 0; i < size; i++) {
             	for (int j = 0; j < size; j++) {
                 	char displayChar;
-                	// Si hay una letra de palabra, usarla; si no, letra aleatoria
+                	// Si hay una letra ponerla, sino poner una random (pero que siempre sea la misma sino cambian cada vez)
                 	if (grid[i][j] != '.') {
                     	displayChar = grid[i][j];
                 	} else {
@@ -206,13 +210,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 	int x_pos = buffer + j * cellSize + cellSize / 3;
                 	int y_pos = buffer + i * cellSize + cellSize / 4;
 
+                	// Hacer las letras sobre el cursor bold para que sepas donde esta el cursor
                 	if (estadoSopa[i][j].flotada) {
                     	SelectObject(hdc, hFontBold);
                     } else {
                     	SelectObject(hdc, hFontNormal);
                     }
 
-                	// Configurar estilo según estado de la celda
+                	// Diferentes colores dependiendo de el estado de la celula
                 	if (estadoSopa[i][j].encontrada) {
                     	SetTextColor(hdc, RGB(0, 128, 0));  // Verde: palabra encontrada
                 	} else if (estadoSopa[i][j].seleccionada) {
@@ -226,43 +231,49 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             	}
         	}
 
-            // Mostrar Palabras que faltantes
-            char infoStr[50];
-            sprintf(infoStr, "Faltan: %d palabras", pFaltantes);
-            SelectObject(hdc, hFontNormal);
-            SetTextColor(hdc, RGB(0, 0, 0));
-            TextOut(hdc, gridSize + buffer, buffer + cellSize, infoStr, strlen(infoStr));
-
-            int yOffset = buffer + 2 * cellSize;
-        	for (int i = 0; i < nPalabras; i++) {
-                if (!palabras[i].encontrada) {
-                    SelectObject(hdc, hFontNormal);
-                    SetTextColor(hdc, RGB(0, 0, 0));
-                    TextOut(hdc, gridSize + buffer, yOffset, palabras[i].escribe, strlen(palabras[i].escribe));
-                    yOffset += 25;  // Espaciado entre palabras
-                }
-        	}
-
+            // Mostrar el numero de sopas resueltas (No me dio tiempo de hacer un menu o un fin real entonces esta fue mi solucion :3)
             char resueltasStr[50];
             SelectObject(hdc, hFontNormal);
             SetTextColor(hdc, RGB(0, 0, 0));
             sprintf(resueltasStr, "Sopas Resueltas: %d", sopasResueltas);
             TextOut(hdc, gridSize + buffer, buffer, resueltasStr, strlen(resueltasStr));
 
-            yOffset += 50;
+            // Mostrar cuantas palabras faltan
+            char infoStr[50];
+            sprintf(infoStr, "Faltan: %d palabras", pFaltantes); // String que dice cuantas palabras faltan
             SelectObject(hdc, hFontNormal);
             SetTextColor(hdc, RGB(0, 0, 0));
-            TextOut(hdc, gridSize + buffer, yOffset, "FECHAS mueven", 13);
+            TextOut(hdc, gridSize + buffer, buffer + cellSize, infoStr, strlen(infoStr)); // Imprime String
+
+            // Mostrar palabras que faltan
+            int yOffset = buffer + 2 * cellSize; // Distancia entre oraciones impresas en el lado
+        	for (int i = 0; i < nPalabras; i++) {
+                if (!palabras[i].encontrada) { // Si la palabra no ha sido encontrada
+                    SelectObject(hdc, hFontNormal);
+                    SetTextColor(hdc, RGB(0, 0, 0));
+                    TextOut(hdc, gridSize + buffer, yOffset, palabras[i].escribe, strlen(palabras[i].escribe)); // Imprime la palabra
+                    // Pensaba tener que si la habias encontrado la tachara pero como no siempre aparecen todas las palabras asi no se tachaban palabras que no habian aparecido
+                    yOffset += 25;  // Incrementa el buffer
+                }
+        	}
+
+        	// Mostrarle los controles al usuario
+            yOffset += 50; // Subir el buffer doble para que el usuario no confunda esto con las palabras faltantes
+            SelectObject(hdc, hFontNormal);
+            SetTextColor(hdc, RGB(0, 0, 0));
+            TextOut(hdc, gridSize + buffer, yOffset, "FECHAS mueven", 13); // Te dice que te mueves con las flechas
 
             yOffset += 25;
             SelectObject(hdc, hFontNormal);
             SetTextColor(hdc, RGB(0, 0, 0));
-            TextOut(hdc, gridSize + buffer, yOffset, "ESPACIO selecciona", 18);
+            TextOut(hdc, gridSize + buffer, yOffset, "ESPACIO selecciona", 18); // Te dice que con espacio seleccionas una celula
 
             yOffset += 25;
             SelectObject(hdc, hFontNormal);
             SetTextColor(hdc, RGB(0, 0, 0));
-            TextOut(hdc, gridSize + buffer, yOffset, "ENTER verifica ", 14);
+            TextOut(hdc, gridSize + buffer, yOffset, "ENTER verifica ", 14); // Te dice que con enter verificas la palabra
+
+            // (SelectObject(hdc, hFontNormal);) y (SetTextColor(hdc, RGB(0, 0, 0));) nadamas hacen que el font sea normal y que el texto sea negro
 
         	// Limpiar recursos
         	DeleteObject(hFontNormal);
@@ -287,7 +298,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         	break;
 
     	default:
-        	// Manejar otros mensajes con el procedimiento por defecto
+        	// Si es otra cosa namas has lo que windows dice que hagas por default
         	return DefWindowProc(hwnd, uMsg, wParam, lParam);
 	}
 	return 0;
@@ -329,7 +340,7 @@ int cuentaPalabras() {
 	return count;
 }
 
-// Carga las palabras desde el archivo a la memoria
+// Lee las palabras del archivo a la memoria
 void cargarPalabras() {
 	FILE *fptr = fopen("palabras.txt", "r");
 	if (!fptr) return;
@@ -340,15 +351,14 @@ void cargarPalabras() {
 	while (fgets(line, sizeof(line), fptr)) {
     	// Eliminar salto de línea
     	line[strcspn(line, "\n")] = '\0';
-    	// Copiar palabra a la estructura
+    	// Copiar la palabra
     	strcpy(palabras[idx].escribe, line);
-    	// Guardar longitud
+    	// Guardar su longitud
     	palabras[idx].largo = strlen(line);
-    	// Inicializar como no encontrada
+    	// Inicializarla como no encontrada
     	palabras[idx].encontrada = false;
     	idx++;
 	}
-
 	fclose(fptr);
 }
 
@@ -361,12 +371,12 @@ void ponPalabras() {
 
 	for (int p = 0; p < nPalabras; p++) {
         colocada = false;
-        intentos = 1000;  // Máximo de intentos por palabra
+        intentos = 10000;  // Maximos intentos por palabra
 
         while (!colocada && intentos-- > 0) {
             // Elegir dirección aleatoria (0 = horizontal, 1 = vertical)
             dir = rand() % 2;
-            // Máxima posición inicial posible para que quepa la palabra
+            // Maxima posicion posible que quepa en la sopa
             max_pos = size - palabras[p].largo;
 
             // Si la palabra no cabe, saltarla
@@ -384,7 +394,7 @@ void ponPalabras() {
 
             compatible = true;
 
-            // Verificar compatibilidad con la cuadrícula
+            // Verificar que no haya conflictos
             for (int c = 0; c < palabras[p].largo; c++) {
                 posX = (dir == 0) ? x : x + c;
                 posY = (dir == 0) ? y + c : y;
@@ -396,20 +406,20 @@ void ponPalabras() {
             }
         }
 
+        // Si despues de todos los intentos no se puede poner en una posicion valida, no la pongas, quitala de las palabras faltantes y marcala como encontrada y salte de esta funcion
         if (compatible == false) {
             palabras[p].encontrada = true;
             pFaltantes--;
+            continue;
         }
 
-        if (!compatible) continue;
-
-    	// Guardar posición inicial
+    	// Guardar la posicion de la palabra
     	palabras[p].startX = x;
     	palabras[p].startY = y;
-    	// Asignar dirección como carácter
+    	// Asignar direccion como caracter
     	palabras[p].direcion = (dir == 0) ? 'h' : 'v';
 
-    	// Colocar cada letra en la cuadrícula
+    	// Colocar cada letra en su cuadricula
     	for (int c = 0; c < palabras[p].largo; c++) {
             char letra = palabras[p].escribe[c];
         	if (dir == 0) {  // Horizontal
@@ -420,6 +430,7 @@ void ponPalabras() {
             	estadoSopa[x + c][y].letra = letra;
         	}
     	}
+    	// Define la palabra como colocada
     	colocada = true;
 	}
 }
@@ -427,65 +438,76 @@ void ponPalabras() {
 // Maneja las teclas presionadas
 void step(WPARAM wParam) {
 	switch(wParam) {
-    	case VK_LEFT:  mueveP('L'); break;  // Flecha izquierda
-    	case VK_RIGHT: mueveP('R'); break; // Flecha derecha
-    	case VK_UP:	mueveP('U'); break; // Flecha arriba
-    	case VK_DOWN:  mueveP('D'); break; // Flecha abajo
-    	case VK_SPACE: seleccion(); break;  // Espacio: inicio/selección
-    	case VK_RETURN: // Enter: confirmar selección
+    	case VK_LEFT:
+    	    mueveP('L'); // Flecha izquierda
+    	    break;
+    	case VK_RIGHT:   // Flecha derecha
+    	    mueveP('R');
+    	    break;
+    	case VK_UP:	     // Flecha arriba
+    	    mueveP('U');
+    	    break;
+    	case VK_DOWN:    // Flecha abajo
+    	    mueveP('D');
+    	    break;
+    	case VK_SPACE:   // Espacio: inicio/selección
+    	    seleccion(); // Selecciona o desselecciona la celula
+    	    break;
+    	case VK_RETURN:  // Enter: confirmar selección
         	if (uPOS.seleccionando) {
-            	verificarPalabra();
-            	seleccion();
+            	verificarPalabra(); // Verifica que la palabra sea correcta
+            	seleccion();        // Quita tu seleccion
         	}
         	break;
 	}
-	// Forzar repintado de la ventana
+	// Volver a pintar la ventana en base a tu accion
 	InvalidateRect(ghWnd, NULL, TRUE);
 }
 
 // Mueve el cursor según la tecla presionada
 void mueveP(char tecla) {
-    // Limpiar estado flotado actual
+    // Desmarca celda actual
     estadoSopa[uPOS.ver][uPOS.hor].flotada = false;
 
+    // Actualiza posicion segun tecla
 	if (tecla == 'U' && uPOS.ver > 0) uPOS.ver--;   // Arriba
 	else if (tecla == 'D' && uPOS.ver < size - 1) uPOS.ver++;   // Abajo
 	else if (tecla == 'L' && uPOS.hor > 0) uPOS.hor--;  // Izquierda
 	else if (tecla == 'R' && uPOS.hor < size - 1) uPOS.hor++;   // Derecha
 
-    // Actualizar estado flotado
+    // Marcar nueva seleccion
     estadoSopa[uPOS.ver][uPOS.hor].flotada = true;
 
-    // !! Actualizar selección si es necesario
+    // Actualizar seleccion visual
     actualizarSeleccion();
 }
 
 // Maneja la selección de palabras
 void seleccion() {
 	if (!uPOS.seleccionando) {
-    	// Comenzar selección: guardar posición actual
+    	// Inicia seleccion
     	uPOS.SEL[0] = uPOS.ver;
     	uPOS.SEL[1] = uPOS.hor;
     	uPOS.seleccionando = true;
 
     	estadoSopa[uPOS.ver][uPOS.hor].seleccionada = true;
 	} else {
-    	// Terminar selección
+    	// Termina seleccion
         uPOS.SEL[0] = -1;
     	uPOS.SEL[1] = -1;
     	uPOS.seleccionando = false;
 	}
 }
 
-// !! Función para actualizar estado de selección
+// Actualizar seleccion visual
 void actualizarSeleccion() {
-    // Limpiar selección previa
+    // Quitar seleccion previa
     for (int i = 0; i < size; i++) {
         for (int j = 0; j < size; j++) {
             estadoSopa[i][j].seleccionada = false;
         }
     }
-    // Si la posicion del usuario no es una linea recta de la seleccion
+
     if (uPOS.seleccionando) {
 
         int x0 = uPOS.SEL[0];
@@ -505,8 +527,12 @@ void actualizarSeleccion() {
         // Si es línea recta, marcar el rango
         else if (esHorizontal || esVertical) {
 
+            // si x1 es igual a x0, dx iguala 0; si x1 es mayor a x0, dx iguala 1; else dx iguala menos uno
             int dx = (x1 == x0) ? 0 : (x1 > x0) ? 1 : -1;
+            // si y1 es igual a y0, dy iguala 0; si xy es mayor a y0, dy iguala 1; else dy iguala menos uno
             int dy = (y1 == y0) ? 0 : (y1 > y0) ? 1 : -1;
+
+            // !!
 
             int x = x0, y = y0;
 
@@ -516,6 +542,8 @@ void actualizarSeleccion() {
                 x += dx;
                 y += dy;
             }
+
+            // !!
         }
     }
 }
@@ -537,6 +565,7 @@ void reiniciarSopa() {
     grid = (char**)malloc(size * sizeof(char*));
     letrasRand = (char**)malloc(size * sizeof(char*));
 
+    // Inicializar matrices
     for (int i = 0; i < size; i++) {
         estadoSopa[i] = (CeldaEstado*)malloc(size * sizeof(CeldaEstado));
         grid[i] = (char*)malloc(size * sizeof(char));
@@ -572,22 +601,25 @@ void verificarPalabra() {
 	int finX = uPOS.ver;   	// Fila final
 	int finY = uPOS.hor;   	// Columna final
 
-	// Determinar dirección de la selección
+	// Determinar en que direccion selecciono el usuario
 	int dx = (finX == inicioX) ? 0 : (finX > inicioX) ? 1 : -1;
 	int dy = (finY == inicioY) ? 0 : (finY > inicioY) ? 1 : -1;
 
-	// Extraer la palabra de la cuadrícula
-	char palabra[20] = {0}; // Inicializar con ceros
-	int idx = 0;
-	int x = inicioX, y = inicioY;
+	// !!
+
+	char palabra[20] = {0}; // Buffer para almacenar palabra
+	int idx = 0;            // counter
+	int x = inicioX, y = inicioY;   // comienza en la posicion inicial
 
 	// Recorrer desde inicio hasta fin
-	while (x != finX + dx || y != finY + dy) {
-    	palabra[idx++] = grid[x][y]; // Añadir letra
+	while (x != finX + dx || y != finY + dy) { // si x o y no es el punto final + 1 (para no excluir la ultima letra)
+    	palabra[idx++] = grid[x][y]; // Toma la letra actual, le suma uno al buffer de la palabra y la anade alli
     	x += dx; // Mover en dirección X
     	y += dy; // Mover en dirección Y
-    	if (idx >= 19) break; // Prevenir desbordamiento
+    	if (idx >= 12) break; // Previene desbordamiento
 	}
+
+    // !!
 
 	// Buscar la palabra en la lista
 	for (int i = 0; i < nPalabras; i++) {
@@ -598,24 +630,28 @@ void verificarPalabra() {
         	palabras[i].encontrada = true;
         	pFaltantes--;
 
+            // Si era la ultima palabra que faltaba
             if (pFaltantes == 0) {
-                sopasResueltas++;  // Incrementar contador
+                sopasResueltas++;  // Incrementar contador de sopas resueltas
                 reiniciarSopa();   // Generar nueva sopa
+                break;
             }
 
+            // Guardar coordenadas como coordenadas iniciales
         	x = palabras[i].startX;
         	y = palabras[i].startY;
 
         	// Marcar cada letra como encontrada
         	for (int c = 0; c < palabras[i].largo; c++) {
             	estadoSopa[x][y].encontrada = true;
-            	// Mover según dirección de la palabra
+            	// Mover segun la direccion de la palabra
             	if (palabras[i].direcion == 'h') y++;
             	else x++;
         	}
         	break;
     	}
 	}
+	// deseleccionar las celulas
     for (int i = 0; i < size; i++) {
         for (int j = 0; j < size; j++) {
             estadoSopa[i][j].seleccionada = false;
